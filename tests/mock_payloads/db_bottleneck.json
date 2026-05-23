@@ -1,0 +1,78 @@
+{
+  "scenario": "database_bottleneck_slow_query",
+  "description": "Slow query lock on catalog-db blocks checkout-service checkout transactions",
+  "payloads": [
+    {
+      "source": "prometheus",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "__name__": "http_request_duration_seconds",
+                "handler": "/checkout",
+                "job": "checkout-service",
+                "env": "production"
+              },
+              "values": [
+                [1779570420, "0.12"],
+                [1779570480, "0.15"],
+                [1779570540, "2.45"],
+                [1779570600, "4.89"],
+                [1779570660, "5.10"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "loki",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "streams",
+          "result": [
+            {
+              "stream": {
+                "app": "checkout-service",
+                "env": "production",
+                "pod": "checkout-service-ab73-9wk1p",
+                "level": "warn"
+              },
+              "values": [
+                ["1779570490000000000", "Slow SQL query detected: SELECT * FROM checkout_session WHERE id='cs_9410' FOR UPDATE (duration=4.8s) trace_id=t2210a"],
+                ["1779570495000000000", "Database lock wait timeout exceeded while locking table 'checkout_session' trace_id=t2210a"],
+                ["1779570500000000000", "Slow SQL query detected: SELECT * FROM checkout_session WHERE id='cs_9411' FOR UPDATE (duration=5.0s) trace_id=t2210b"],
+                ["1779570510000000000", "HTTP Transaction failed with status 503 Service Unavailable trace_id=t2210a"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "alertmanager",
+      "data": {
+        "alerts": [
+          {
+            "status": "firing",
+            "labels": {
+              "alertname": "CheckoutLatencyAlert",
+              "service": "checkout-service",
+              "severity": "warning",
+              "env": "production"
+            },
+            "annotations": {
+              "summary": "Checkout transaction latency has breached the SLA warning threshold of 2.0s.",
+              "description": "Checkout service endpoint /checkout transaction duration has spiked to an average of 4.89s, causing high frontend drop-offs."
+            },
+            "startsAt": "2026-05-23T21:07:30Z"
+          }
+        ]
+      }
+    }
+  ]
+}

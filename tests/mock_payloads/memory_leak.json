@@ -1,0 +1,80 @@
+{
+  "scenario": "memory_leak_oom_kill",
+  "description": "payment-service leaks JVM heap space over time, triggering Kubernetes OOMKilled pod reboot",
+  "payloads": [
+    {
+      "source": "prometheus",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "__name__": "kube_pod_container_status_restarts_total",
+                "pod": "payment-service-89f92-2x9wl",
+                "job": "kubernetes-cadvisor",
+                "env": "production"
+              },
+              "values": [
+                [1779570780, "0.0"],
+                [1779570840, "0.0"],
+                [1779570900, "1.0"],
+                [1779570960, "1.0"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "loki",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "streams",
+          "result": [
+            {
+              "stream": {
+                "app": "payment-service",
+                "env": "production",
+                "pod": "payment-service-89f92-2x9wl",
+                "level": "error"
+              },
+              "values": [
+                ["1779570820000000000", "Critical warnings: JVM heap consumption exceeded 95% of active allocation (512MB)"],
+                ["1779570830000000000", "Warning: Garbage Collection spending >98% CPU executing gc sweeps"],
+                ["1779570835000000000", "Exception in thread 'http-nio-8080-exec-4' java.lang.OutOfMemoryError: Java heap space"],
+                ["1779570836000000000", "Exception in thread 'http-nio-8080-exec-5' java.lang.OutOfMemoryError: Java heap space"],
+                ["1779570838000000000", "FATAL: JVM has encountered an unrecoverable out of memory exception. Shutting down..."],
+                ["1779570880000000000", "INFO: Spring Boot framework version 3.2.1 starting up on payment-service-89f92-2x9wl"],
+                ["1779570890000000000", "INFO: Service payment-service loaded active profile: production, binding port 8080"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "alertmanager",
+      "data": {
+        "alerts": [
+          {
+            "status": "firing",
+            "labels": {
+              "alertname": "PodRestartBurst",
+              "service": "payment-service",
+              "severity": "critical",
+              "env": "production"
+            },
+            "annotations": {
+              "summary": "payment-service container restarts in Kubernetes have exceeded normal thresholds.",
+              "description": "Pod payment-service-89f92-2x9wl container rebooted unexpectedly. Reason: OOMKilled (Exit Code 137)."
+            },
+            "startsAt": "2026-05-23T21:15:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}
