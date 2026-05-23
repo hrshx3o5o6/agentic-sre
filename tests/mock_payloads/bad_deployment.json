@@ -1,0 +1,116 @@
+{
+  "scenario": "bad_deployment_retry_storm",
+  "description": "auth-service:v1.32.4 deployment triggers high retry storm and exhausts postgres-db connections",
+  "payloads": [
+    {
+      "source": "github",
+      "data": {
+        "deployment": {
+          "id": 894102,
+          "sha": "9a8b7c6d5e4f3a2b1c0d",
+          "ref": "refs/tags/v1.32.4",
+          "environment": "production",
+          "created_at": "2026-05-23T21:00:00Z"
+        },
+        "repository": {
+          "name": "auth-service",
+          "full_name": "org/auth-service"
+        },
+        "sender": {
+          "login": "sre-deployer-bot"
+        }
+      }
+    },
+    {
+      "source": "loki",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "streams",
+          "result": [
+            {
+              "stream": {
+                "app": "auth-service",
+                "env": "production",
+                "pod": "auth-service-7f49cbd-2x9wl",
+                "level": "error"
+              },
+              "values": [
+                ["1779570090000000000", "DB connection failure: too many open connections. Retrying in 1s... trace_id=t89410a8b"],
+                ["1779570091000000000", "Re-executing query. Attempt 2. Error: timed out trace_id=t89410a8b"],
+                ["1779570092000000000", "Re-executing query. Attempt 3. Error: timed out trace_id=t89410a8b"],
+                ["1779570093000000000", "DB connection failure: too many open connections. Retrying in 1s... trace_id=t89410a8b"],
+                ["1779570100000000000", "DB connection failure: too many open connections. Retrying in 1s... trace_id=t89410a8c"],
+                ["1779570101000000000", "Re-executing query. Attempt 2. Error: timed out trace_id=t89410a8c"],
+                ["1779570102000000000", "Re-executing query. Attempt 3. Error: timed out trace_id=t89410a8c"],
+                ["1779570110000000000", "HTTP Request POST /login returned status 500 trace_id=t89410a8b"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "prometheus",
+      "data": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "__name__": "db_connections_utilization_ratio",
+                "job": "postgres-db",
+                "env": "production"
+              },
+              "values": [
+                [1779569940, "42.0"],
+                [1779570000, "45.0"],
+                [1779570060, "88.5"],
+                [1779570120, "99.2"],
+                [1779570180, "100.0"]
+              ]
+            },
+            {
+              "metric": {
+                "__name__": "http_requests_total",
+                "handler": "/login",
+                "job": "auth-service",
+                "status": "5xx",
+                "env": "production"
+              },
+              "values": [
+                [1779569940, "0.0"],
+                [1779570000, "0.2"],
+                [1779570060, "12.4"],
+                [1779570120, "65.8"],
+                [1779570180, "92.1"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source": "alertmanager",
+      "data": {
+        "alerts": [
+          {
+            "status": "firing",
+            "labels": {
+              "alertname": "PostgresConnectionsExhausted",
+              "service": "postgres-db",
+              "severity": "critical",
+              "env": "production"
+            },
+            "annotations": {
+              "summary": "Postgres connections utilization exceeded 98% of active pool.",
+              "description": "Postgres service postgres-db is saturated at 100% database connection pool capacity. High risks of application tier outages."
+            },
+            "startsAt": "2026-05-23T21:02:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}
